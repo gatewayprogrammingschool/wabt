@@ -17,8 +17,11 @@
 #ifndef WABT_OPCODE_H_
 #define WABT_OPCODE_H_
 
+#include <vector>
+
 #include "src/common.h"
 #include "src/opcode-code-table.h"
+#include "src/leb128.h"
 
 namespace wabt {
 
@@ -54,13 +57,16 @@ struct Opcode {
   bool HasPrefix() const { return GetInfo().prefix != 0; }
   uint8_t GetPrefix() const { return GetInfo().prefix; }
   uint32_t GetCode() const { return GetInfo().code; }
-  size_t GetLength() const { return HasPrefix() ? 2 : 1; }
+  size_t GetLength() const { return GetBytes().size(); }
   const char* GetName() const { return GetInfo().name; }
   Type GetResultType() const { return GetInfo().result_type; }
   Type GetParamType1() const { return GetInfo().param1_type; }
   Type GetParamType2() const { return GetInfo().param2_type; }
   Type GetParamType3() const { return GetInfo().param3_type; }
   Address GetMemorySize() const { return GetInfo().memory_size; }
+
+  // Get the byte sequence for this opcode, including prefix.
+  std::vector<uint8_t> GetBytes() const;
 
   // Get the lane count of an extract/replace simd op.
   uint32_t GetSimdLaneCount() const;
@@ -99,7 +105,10 @@ struct Opcode {
 
   static uint32_t PrefixCode(uint8_t prefix, uint32_t code) {
     // For now, 8 bits is enough for all codes.
-    assert(code < 0x100);
+    if (code >= 0x100) {
+      // Clamp to 0xff, since we know that it is an invalid code.
+      code = 0xff;
+    }
     return (prefix << 8) | code;
   }
 

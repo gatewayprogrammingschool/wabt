@@ -48,6 +48,7 @@ class Validator : public ExprVisitor::Delegate {
   Result EndBlockExpr(BlockExpr*) override;
   Result OnBrExpr(BrExpr*) override;
   Result OnBrIfExpr(BrIfExpr*) override;
+  Result OnBrOnExnExpr(BrOnExnExpr*) override;
   Result OnBrTableExpr(BrTableExpr*) override;
   Result OnCallExpr(CallExpr*) override;
   Result OnCallIndirectExpr(CallIndirectExpr*) override;
@@ -55,28 +56,38 @@ class Validator : public ExprVisitor::Delegate {
   Result OnConstExpr(ConstExpr*) override;
   Result OnConvertExpr(ConvertExpr*) override;
   Result OnDropExpr(DropExpr*) override;
-  Result OnGetGlobalExpr(GetGlobalExpr*) override;
-  Result OnGetLocalExpr(GetLocalExpr*) override;
+  Result OnGlobalGetExpr(GlobalGetExpr*) override;
+  Result OnGlobalSetExpr(GlobalSetExpr*) override;
   Result BeginIfExpr(IfExpr*) override;
   Result AfterIfTrueExpr(IfExpr*) override;
   Result EndIfExpr(IfExpr*) override;
-  Result BeginIfExceptExpr(IfExceptExpr*) override;
-  Result AfterIfExceptTrueExpr(IfExceptExpr*) override;
-  Result EndIfExceptExpr(IfExceptExpr*) override;
   Result OnLoadExpr(LoadExpr*) override;
+  Result OnLocalGetExpr(LocalGetExpr*) override;
+  Result OnLocalSetExpr(LocalSetExpr*) override;
+  Result OnLocalTeeExpr(LocalTeeExpr*) override;
   Result BeginLoopExpr(LoopExpr*) override;
   Result EndLoopExpr(LoopExpr*) override;
+  Result OnMemoryCopyExpr(MemoryCopyExpr*) override;
+  Result OnDataDropExpr(DataDropExpr*) override;
+  Result OnMemoryFillExpr(MemoryFillExpr*) override;
   Result OnMemoryGrowExpr(MemoryGrowExpr*) override;
+  Result OnMemoryInitExpr(MemoryInitExpr*) override;
   Result OnMemorySizeExpr(MemorySizeExpr*) override;
+  Result OnTableCopyExpr(TableCopyExpr*) override;
+  Result OnElemDropExpr(ElemDropExpr*) override;
+  Result OnTableInitExpr(TableInitExpr*) override;
+  Result OnTableGetExpr(TableGetExpr*) override;
+  Result OnTableSetExpr(TableSetExpr*) override;
+  Result OnTableGrowExpr(TableGrowExpr*) override;
+  Result OnTableSizeExpr(TableSizeExpr*) override;
+  Result OnRefNullExpr(RefNullExpr*) override;
+  Result OnRefIsNullExpr(RefIsNullExpr*) override;
   Result OnNopExpr(NopExpr*) override;
   Result OnReturnExpr(ReturnExpr*) override;
   Result OnReturnCallExpr(ReturnCallExpr*) override;
   Result OnReturnCallIndirectExpr(ReturnCallIndirectExpr*) override;
   Result OnSelectExpr(SelectExpr*) override;
-  Result OnSetGlobalExpr(SetGlobalExpr*) override;
-  Result OnSetLocalExpr(SetLocalExpr*) override;
   Result OnStoreExpr(StoreExpr*) override;
-  Result OnTeeLocalExpr(TeeLocalExpr*) override;
   Result OnUnaryExpr(UnaryExpr*) override;
   Result OnUnreachableExpr(UnreachableExpr*) override;
   Result BeginTryExpr(TryExpr*) override;
@@ -85,7 +96,7 @@ class Validator : public ExprVisitor::Delegate {
   Result OnThrowExpr(ThrowExpr*) override;
   Result OnRethrowExpr(RethrowExpr*) override;
   Result OnAtomicWaitExpr(AtomicWaitExpr*) override;
-  Result OnAtomicWakeExpr(AtomicWakeExpr*) override;
+  Result OnAtomicNotifyExpr(AtomicNotifyExpr*) override;
   Result OnAtomicLoadExpr(AtomicLoadExpr*) override;
   Result OnAtomicStoreExpr(AtomicStoreExpr*) override;
   Result OnAtomicRmwExpr(AtomicRmwExpr*) override;
@@ -123,6 +134,8 @@ class Validator : public ExprVisitor::Delegate {
   Result CheckFuncTypeVar(const Var* var, const FuncType** out_func_type);
   Result CheckTableVar(const Var* var, const Table** out_table);
   Result CheckMemoryVar(const Var* var, const Memory** out_memory);
+  Result CheckDataSegmentVar(const Var* var);
+  Result CheckElemSegmentVar(const Var* var);
   Result CheckLocalVar(const Var* var, Type* out_type);
   Type GetLocalVarTypeOrAny(const Var* var);
   void CheckAlign(const Location* loc,
@@ -159,6 +172,7 @@ class Validator : public ExprVisitor::Delegate {
                                 const char* desc);
   void CheckExprList(const Location* loc, const ExprList& exprs);
   bool CheckHasMemory(const Location* loc, Opcode opcode);
+  bool CheckHasTable(const Location* loc, Opcode opcode, Index index = 0);
   void CheckHasSharedMemory(const Location* loc, Opcode opcode);
   void CheckBlockDeclaration(const Location* loc,
                              Opcode opcode,
@@ -193,8 +207,8 @@ class Validator : public ExprVisitor::Delegate {
   void CheckAssertReturnNanCommand(const Action* action);
   void CheckCommand(const Command* command);
 
-  void CheckExcept(const Location* loc, const Exception* Except);
-  Result CheckExceptVar(const Var* var, const Exception** out_except);
+  void CheckEvent(const Location* loc, const Event* Event);
+  Result CheckEventVar(const Var* var, const Event** out_event);
 
   const ValidateOptions& options_;
   Errors* errors_ = nullptr;
@@ -205,7 +219,7 @@ class Validator : public ExprVisitor::Delegate {
   Index current_memory_index_ = 0;
   Index current_global_index_ = 0;
   Index num_imported_globals_ = 0;
-  Index current_except_index_ = 0;
+  Index current_event_index_ = 0;
   TypeChecker typechecker_;
   // Cached for access by OnTypecheckerError.
   const Location* expr_loc_ = nullptr;
@@ -315,6 +329,20 @@ Result Validator::CheckMemoryVar(const Var* var, const Memory** out_memory) {
   if (out_memory) {
     *out_memory = current_module_->memories[index];
   }
+  return Result::Ok;
+}
+
+Result Validator::CheckDataSegmentVar(const Var* var) {
+  Index index;
+  CHECK_RESULT(CheckVar(current_module_->data_segments.size(), var,
+                        "data_segment", &index));
+  return Result::Ok;
+}
+
+Result Validator::CheckElemSegmentVar(const Var* var) {
+  Index index;
+  CHECK_RESULT(CheckVar(current_module_->elem_segments.size(), var,
+                        "elem_segment", &index));
   return Result::Ok;
 }
 
@@ -469,6 +497,16 @@ bool Validator::CheckHasMemory(const Location* loc, Opcode opcode) {
   return true;
 }
 
+bool Validator::CheckHasTable(const Location* loc, Opcode opcode, Index index) {
+  if (current_module_->tables.size() <= index) {
+    PrintError(loc, "%s requires table %d to be an imported or defined table.",
+               opcode.GetName(), index);
+    return false;
+  }
+
+  return true;
+}
+
 void Validator::CheckHasSharedMemory(const Location* loc, Opcode opcode) {
   if (CheckHasMemory(loc, opcode)) {
     Memory* memory = current_module_->memories[0];
@@ -542,6 +580,16 @@ Result Validator::OnBrIfExpr(BrIfExpr* expr) {
   return Result::Ok;
 }
 
+Result Validator::OnBrOnExnExpr(BrOnExnExpr* expr) {
+  expr_loc_ = &expr->loc;
+  const Event* event;
+  if (Succeeded(CheckEventVar(&expr->event_var, &event))) {
+    typechecker_.OnBrOnExn(expr->label_var.index(),
+                           event->decl.sig.param_types);
+  }
+  return Result::Ok;
+}
+
 Result Validator::OnBrTableExpr(BrTableExpr* expr) {
   expr_loc_ = &expr->loc;
   typechecker_.BeginBrTable();
@@ -565,13 +613,8 @@ Result Validator::OnCallExpr(CallExpr* expr) {
 
 Result Validator::OnCallIndirectExpr(CallIndirectExpr* expr) {
   expr_loc_ = &expr->loc;
-  if (current_module_->tables.size() == 0) {
-    PrintError(&expr->loc, "found call_indirect operator, but no table");
-  }
-  if (expr->decl.has_func_type) {
-    const FuncType* func_type;
-    CheckFuncTypeVar(&expr->decl.type_var, &func_type);
-  }
+  CheckHasTable(&expr->loc, Opcode::CallIndirect, expr->table.index());
+  CheckFuncSignature(&expr->loc, expr->decl);
   typechecker_.OnCallIndirect(expr->decl.sig.param_types,
                               expr->decl.sig.result_types);
   return Result::Ok;
@@ -601,15 +644,26 @@ Result Validator::OnDropExpr(DropExpr* expr) {
   return Result::Ok;
 }
 
-Result Validator::OnGetGlobalExpr(GetGlobalExpr* expr) {
+Result Validator::OnGlobalGetExpr(GlobalGetExpr* expr) {
   expr_loc_ = &expr->loc;
-  typechecker_.OnGetGlobal(GetGlobalVarTypeOrAny(&expr->var));
+  typechecker_.OnGlobalGet(GetGlobalVarTypeOrAny(&expr->var));
   return Result::Ok;
 }
 
-Result Validator::OnGetLocalExpr(GetLocalExpr* expr) {
+Result Validator::OnGlobalSetExpr(GlobalSetExpr* expr) {
   expr_loc_ = &expr->loc;
-  typechecker_.OnGetLocal(GetLocalVarTypeOrAny(&expr->var));
+  Type type = Type::Any;
+  const Global* global;
+  Index global_index;
+  if (Succeeded(CheckGlobalVar(&expr->var, &global, &global_index))) {
+    if (!global->mutable_) {
+      PrintError(&expr->loc,
+                 "can't global.set on immutable global at index %" PRIindex ".",
+                 global_index);
+    }
+    type = global->type;
+  }
+  typechecker_.OnGlobalSet(type);
   return Result::Ok;
 }
 
@@ -635,39 +689,30 @@ Result Validator::EndIfExpr(IfExpr* expr) {
   return Result::Ok;
 }
 
-Result Validator::BeginIfExceptExpr(IfExceptExpr* expr) {
-  expr_loc_ = &expr->loc;
-  CheckBlockDeclaration(&expr->loc, Opcode::IfExcept, &expr->true_.decl);
-  const Exception* except;
-  TypeVector except_sig;
-  if (Succeeded(CheckExceptVar(&expr->except_var, &except))) {
-    except_sig = except->sig;
-  }
-  typechecker_.OnIfExcept(expr->true_.decl.sig.param_types,
-                          expr->true_.decl.sig.result_types, except_sig);
-  return Result::Ok;
-}
-
-Result Validator::AfterIfExceptTrueExpr(IfExceptExpr* expr) {
-  if (!expr->false_.empty()) {
-    typechecker_.OnElse();
-  }
-  return Result::Ok;
-}
-
-Result Validator::EndIfExceptExpr(IfExceptExpr* expr) {
-  expr_loc_ =
-      expr->false_.empty() ? &expr->true_.end_loc : &expr->false_end_loc;
-  typechecker_.OnEnd();
-  return Result::Ok;
-}
-
 Result Validator::OnLoadExpr(LoadExpr* expr) {
   expr_loc_ = &expr->loc;
   CheckHasMemory(&expr->loc, expr->opcode);
   CheckAlign(&expr->loc, expr->align,
              get_opcode_natural_alignment(expr->opcode));
   typechecker_.OnLoad(expr->opcode);
+  return Result::Ok;
+}
+
+Result Validator::OnLocalGetExpr(LocalGetExpr* expr) {
+  expr_loc_ = &expr->loc;
+  typechecker_.OnLocalGet(GetLocalVarTypeOrAny(&expr->var));
+  return Result::Ok;
+}
+
+Result Validator::OnLocalSetExpr(LocalSetExpr* expr) {
+  expr_loc_ = &expr->loc;
+  typechecker_.OnLocalSet(GetLocalVarTypeOrAny(&expr->var));
+  return Result::Ok;
+}
+
+Result Validator::OnLocalTeeExpr(LocalTeeExpr* expr) {
+  expr_loc_ = &expr->loc;
+  typechecker_.OnLocalTee(GetLocalVarTypeOrAny(&expr->var));
   return Result::Ok;
 }
 
@@ -685,6 +730,28 @@ Result Validator::EndLoopExpr(LoopExpr* expr) {
   return Result::Ok;
 }
 
+Result Validator::OnMemoryCopyExpr(MemoryCopyExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasMemory(&expr->loc, Opcode::MemoryCopy);
+  typechecker_.OnMemoryCopy();
+  return Result::Ok;
+}
+
+Result Validator::OnDataDropExpr(DataDropExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasMemory(&expr->loc, Opcode::DataDrop);
+  CheckDataSegmentVar(&expr->var);
+  typechecker_.OnDataDrop(expr->var.index());
+  return Result::Ok;
+}
+
+Result Validator::OnMemoryFillExpr(MemoryFillExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasMemory(&expr->loc, Opcode::MemoryFill);
+  typechecker_.OnMemoryFill();
+  return Result::Ok;
+}
+
 Result Validator::OnMemoryGrowExpr(MemoryGrowExpr* expr) {
   expr_loc_ = &expr->loc;
   CheckHasMemory(&expr->loc, Opcode::MemoryGrow);
@@ -692,10 +759,81 @@ Result Validator::OnMemoryGrowExpr(MemoryGrowExpr* expr) {
   return Result::Ok;
 }
 
+Result Validator::OnMemoryInitExpr(MemoryInitExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasMemory(&expr->loc, Opcode::MemoryInit);
+  CheckDataSegmentVar(&expr->var);
+  typechecker_.OnMemoryInit(expr->var.index());
+  return Result::Ok;
+}
+
 Result Validator::OnMemorySizeExpr(MemorySizeExpr* expr) {
   expr_loc_ = &expr->loc;
   CheckHasMemory(&expr->loc, Opcode::MemorySize);
   typechecker_.OnMemorySize();
+  return Result::Ok;
+}
+
+Result Validator::OnTableCopyExpr(TableCopyExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasTable(&expr->loc, Opcode::TableCopy);
+  typechecker_.OnTableCopy();
+  return Result::Ok;
+}
+
+Result Validator::OnElemDropExpr(ElemDropExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasTable(&expr->loc, Opcode::ElemDrop);
+  CheckElemSegmentVar(&expr->var);
+  typechecker_.OnElemDrop(expr->var.index());
+  return Result::Ok;
+}
+
+Result Validator::OnTableInitExpr(TableInitExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasTable(&expr->loc, Opcode::TableInit);
+  CheckElemSegmentVar(&expr->var);
+  typechecker_.OnTableInit(expr->var.index());
+  return Result::Ok;
+}
+
+Result Validator::OnTableGetExpr(TableGetExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasTable(&expr->loc, Opcode::TableGet, expr->var.index());
+  typechecker_.OnTableGet(expr->var.index());
+  return Result::Ok;
+}
+
+Result Validator::OnTableSetExpr(TableSetExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasTable(&expr->loc, Opcode::TableSet, expr->var.index());
+  typechecker_.OnTableSet(expr->var.index());
+  return Result::Ok;
+}
+
+Result Validator::OnTableGrowExpr(TableGrowExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasTable(&expr->loc, Opcode::TableGrow, expr->var.index());
+  typechecker_.OnTableGrow(expr->var.index());
+  return Result::Ok;
+}
+
+Result Validator::OnTableSizeExpr(TableSizeExpr* expr) {
+  expr_loc_ = &expr->loc;
+  CheckHasTable(&expr->loc, Opcode::TableSize, expr->var.index());
+  typechecker_.OnTableSize(expr->var.index());
+  return Result::Ok;
+}
+
+Result Validator::OnRefNullExpr(RefNullExpr* expr) {
+  expr_loc_ = &expr->loc;
+  typechecker_.OnRefNullExpr();
+  return Result::Ok;
+}
+
+Result Validator::OnRefIsNullExpr(RefIsNullExpr* expr) {
+  expr_loc_ = &expr->loc;
+  typechecker_.OnRefIsNullExpr();
   return Result::Ok;
 }
 
@@ -711,41 +849,27 @@ Result Validator::OnReturnExpr(ReturnExpr* expr) {
 }
 
 Result Validator::OnReturnCallExpr(ReturnCallExpr* expr) {
-  // TODO(binji): implement.
-  return Result::Error;
+  expr_loc_ = &expr->loc;
+  const Func* callee;
+  if (Succeeded(CheckFuncVar(&expr->var, &callee))) {
+    typechecker_.OnReturnCall(callee->decl.sig.param_types,
+                        callee->decl.sig.result_types);
+  }
+  return Result::Ok;
 }
 
 Result Validator::OnReturnCallIndirectExpr(ReturnCallIndirectExpr* expr) {
-  // TODO(binji): implement.
-  return Result::Error;
+  expr_loc_ = &expr->loc;
+  CheckHasTable(&expr->loc, Opcode::ReturnCallIndirect, expr->table.index());
+  CheckFuncSignature(&expr->loc, expr->decl);
+  typechecker_.OnReturnCallIndirect(expr->decl.sig.param_types,
+                              expr->decl.sig.result_types);
+  return Result::Ok;
 }
 
 Result Validator::OnSelectExpr(SelectExpr* expr) {
   expr_loc_ = &expr->loc;
   typechecker_.OnSelect();
-  return Result::Ok;
-}
-
-Result Validator::OnSetGlobalExpr(SetGlobalExpr* expr) {
-  expr_loc_ = &expr->loc;
-  Type type = Type::Any;
-  const Global* global;
-  Index global_index;
-  if (Succeeded(CheckGlobalVar(&expr->var, &global, &global_index))) {
-    if (!global->mutable_) {
-      PrintError(&expr->loc,
-                 "can't set_global on immutable global at index %" PRIindex ".",
-                 global_index);
-    }
-    type = global->type;
-  }
-  typechecker_.OnSetGlobal(type);
-  return Result::Ok;
-}
-
-Result Validator::OnSetLocalExpr(SetLocalExpr* expr) {
-  expr_loc_ = &expr->loc;
-  typechecker_.OnSetLocal(GetLocalVarTypeOrAny(&expr->var));
   return Result::Ok;
 }
 
@@ -755,12 +879,6 @@ Result Validator::OnStoreExpr(StoreExpr* expr) {
   CheckAlign(&expr->loc, expr->align,
              get_opcode_natural_alignment(expr->opcode));
   typechecker_.OnStore(expr->opcode);
-  return Result::Ok;
-}
-
-Result Validator::OnTeeLocalExpr(TeeLocalExpr* expr) {
-  expr_loc_ = &expr->loc;
-  typechecker_.OnTeeLocal(GetLocalVarTypeOrAny(&expr->var));
   return Result::Ok;
 }
 
@@ -797,9 +915,9 @@ Result Validator::EndTryExpr(TryExpr* expr) {
 
 Result Validator::OnThrowExpr(ThrowExpr* expr) {
   expr_loc_ = &expr->loc;
-  const Exception* except;
-  if (Succeeded(CheckExceptVar(&expr->var, &except))) {
-    typechecker_.OnThrow(except->sig);
+  const Event* event;
+  if (Succeeded(CheckEventVar(&expr->var, &event))) {
+    typechecker_.OnThrow(event->decl.sig.param_types);
   }
   return Result::Ok;
 }
@@ -816,9 +934,9 @@ Result Validator::OnAtomicWaitExpr(AtomicWaitExpr* expr) {
   return Result::Ok;
 }
 
-Result Validator::OnAtomicWakeExpr(AtomicWakeExpr* expr) {
+Result Validator::OnAtomicNotifyExpr(AtomicNotifyExpr* expr) {
   expr_loc_ = &expr->loc;
-  CheckAtomicExpr(expr, &TypeChecker::OnAtomicWake);
+  CheckAtomicExpr(expr, &TypeChecker::OnAtomicNotify);
   return Result::Ok;
 }
 
@@ -896,7 +1014,7 @@ void Validator::CheckFunc(const Location* loc, const Func* func) {
 void Validator::PrintConstExprError(const Location* loc, const char* desc) {
   PrintError(loc,
              "invalid %s, must be a constant expression; either *.const or "
-             "get_global.",
+             "global.get.",
              desc);
 }
 
@@ -919,10 +1037,10 @@ void Validator::CheckConstInitExpr(const Location* loc,
         type = cast<ConstExpr>(expr)->const_.type;
         break;
 
-      case ExprType::GetGlobal: {
+      case ExprType::GlobalGet: {
         const Global* ref_global = nullptr;
         Index ref_global_index;
-        if (Failed(CheckGlobalVar(&cast<GetGlobalExpr>(expr)->var, &ref_global,
+        if (Failed(CheckGlobalVar(&cast<GlobalGetExpr>(expr)->var, &ref_global,
                                   &ref_global_index))) {
           return;
         }
@@ -979,13 +1097,21 @@ void Validator::CheckLimits(const Location* loc,
 }
 
 void Validator::CheckTable(const Location* loc, const Table* table) {
-  if (current_table_index_ == 1) {
+  if (current_table_index_ == 1 &&
+      !options_.features.reference_types_enabled()) {
     PrintError(loc, "only one table allowed");
   }
   CheckLimits(loc, &table->elem_limits, UINT32_MAX, "elems");
 
   if (table->elem_limits.is_shared) {
     PrintError(loc, "tables may not be shared");
+  }
+  if (table->elem_type == Type::Anyref &&
+      !options_.features.reference_types_enabled()) {
+    PrintError(loc, "tables must have anyref type");
+  }
+  if (table->elem_type != Type::Anyref && table->elem_type != Type::Funcref) {
+    PrintError(loc, "tables must have anyref or funcref type");
   }
 }
 
@@ -994,14 +1120,16 @@ void Validator::CheckElemSegments(const Module* module) {
     if (auto elem_segment_field = dyn_cast<ElemSegmentModuleField>(&field)) {
       auto&& elem_segment = elem_segment_field->elem_segment;
       const Table* table;
-      if (Failed(CheckTableVar(&elem_segment.table_var, &table))) {
-        continue;
-      }
-
       for (const Var& var : elem_segment.vars) {
         CheckFuncVar(&var, nullptr);
       }
 
+      if (elem_segment.passive)  {
+        continue;
+      }
+      if (Failed(CheckTableVar(&elem_segment.table_var, &table))) {
+        continue;
+      }
       CheckConstInitExpr(&field.loc, elem_segment.offset, Type::I32,
                          "elem segment offset");
     }
@@ -1028,10 +1156,12 @@ void Validator::CheckDataSegments(const Module* module) {
     if (auto data_segment_field = dyn_cast<DataSegmentModuleField>(&field)) {
       auto&& data_segment = data_segment_field->data_segment;
       const Memory* memory;
+      if (data_segment.passive)  {
+        continue;
+      }
       if (Failed(CheckMemoryVar(&data_segment.memory_var, &memory))) {
         continue;
       }
-
       CheckConstInitExpr(&field.loc, data_segment.offset, Type::I32,
                          "data segment offset");
     }
@@ -1040,9 +1170,9 @@ void Validator::CheckDataSegments(const Module* module) {
 
 void Validator::CheckImport(const Location* loc, const Import* import) {
   switch (import->kind()) {
-    case ExternalKind::Except:
-      ++current_except_index_;
-      CheckExcept(loc, &cast<ExceptionImport>(import)->except);
+    case ExternalKind::Event:
+      ++current_event_index_;
+      CheckEvent(loc, &cast<EventImport>(import)->event);
       break;
 
     case ExternalKind::Func: {
@@ -1078,8 +1208,8 @@ void Validator::CheckImport(const Location* loc, const Import* import) {
 
 void Validator::CheckExport(const Location* loc, const Export* export_) {
   switch (export_->kind) {
-    case ExternalKind::Except:
-      CheckExceptVar(&export_->var, nullptr);
+    case ExternalKind::Event:
+      CheckEventVar(&export_->var, nullptr);
       break;
     case ExternalKind::Func:
       CheckFuncVar(&export_->var, nullptr);
@@ -1122,13 +1252,13 @@ Result Validator::CheckModule(const Module* module) {
   current_memory_index_ = 0;
   current_global_index_ = 0;
   num_imported_globals_ = 0;
-  current_except_index_ = 0;
+  current_event_index_ = 0;
 
   for (const ModuleField& field : module->fields) {
     switch (field.type()) {
-      case ModuleFieldType::Except:
-        ++current_except_index_;
-        CheckExcept(&field.loc, &cast<ExceptionModuleField>(&field)->except);
+      case ModuleFieldType::Event:
+        ++current_event_index_;
+        CheckEvent(&field.loc, &cast<EventModuleField>(&field)->event);
         break;
 
       case ModuleFieldType::Func:
@@ -1264,29 +1394,19 @@ Result Validator::CheckGet(const GetAction* action, Type* out_type) {
   return Result::Ok;
 }
 
-Result Validator::CheckExceptVar(const Var* var, const Exception** out_except) {
+Result Validator::CheckEventVar(const Var* var, const Event** out_event) {
   Index index;
-  CHECK_RESULT(
-      CheckVar(current_module_->excepts.size(), var, "except", &index));
-  if (out_except) {
-    *out_except = current_module_->excepts[index];
+  CHECK_RESULT(CheckVar(current_module_->events.size(), var, "event", &index));
+  if (out_event) {
+    *out_event = current_module_->events[index];
   }
   return Result::Ok;
 }
 
-void Validator::CheckExcept(const Location* loc, const Exception* except) {
-  for (Type ty : except->sig) {
-    switch (ty) {
-      case Type::I32:
-      case Type::I64:
-      case Type::F32:
-      case Type::F64:
-      case Type::V128:
-        break;
-      default:
-        PrintError(loc, "Invalid exception type: %s", GetTypeName(ty));
-        break;
-    }
+void Validator::CheckEvent(const Location* loc, const Event* event) {
+  CheckFuncSignature(loc, event->decl);
+  if (event->decl.sig.GetNumResults() > 0) {
+    PrintError(loc, "Event signature must have 0 results.");
   }
 }
 
@@ -1421,14 +1541,13 @@ class Validator::CheckFuncSignatureExprVisitorDelegate
     return Result::Ok;
   }
 
-  Result BeginIfExpr(IfExpr* expr) override {
-    validator_->CheckBlockDeclaration(&expr->loc, Opcode::If,
-                                      &expr->true_.decl);
+  Result OnReturnCallIndirectExpr(ReturnCallIndirectExpr* expr) override {
+    validator_->CheckFuncSignature(&expr->loc, expr->decl);
     return Result::Ok;
   }
 
-  Result BeginIfExceptExpr(IfExceptExpr* expr) override {
-    validator_->CheckBlockDeclaration(&expr->loc, Opcode::IfExcept,
+  Result BeginIfExpr(IfExpr* expr) override {
+    validator_->CheckBlockDeclaration(&expr->loc, Opcode::If,
                                       &expr->true_.decl);
     return Result::Ok;
   }

@@ -30,3 +30,5 @@ WABT_FEATURE(simd,             "simd",                    false,   "SIMD support
 WABT_FEATURE(threads,          "threads",                 false,   "Threading support")
 WABT_FEATURE(multi_value,      "multi-value",             false,   "Multi-value")
 WABT_FEATURE(tail_call,        "tail-call",               false,   "Tail-call support")
+WABT_FEATURE(bulk_memory,      "bulk-memory",             false,   "Bulk-memory operations")
+WABT_FEATURE(reference_types,  "reference-types",         false,   "Reference types (anyref)")

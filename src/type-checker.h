@@ -60,21 +60,24 @@ class TypeChecker {
 
   Result BeginFunction(const TypeVector& sig);
   Result OnAtomicLoad(Opcode);
+  Result OnAtomicNotify(Opcode);
   Result OnAtomicStore(Opcode);
   Result OnAtomicRmw(Opcode);
   Result OnAtomicRmwCmpxchg(Opcode);
   Result OnAtomicWait(Opcode);
-  Result OnAtomicWake(Opcode);
   Result OnBinary(Opcode);
   Result OnBlock(const TypeVector& param_types, const TypeVector& result_types);
   Result OnBr(Index depth);
   Result OnBrIf(Index depth);
+  Result OnBrOnExn(Index depth, const TypeVector& types);
   Result BeginBrTable();
   Result OnBrTableTarget(Index depth);
   Result EndBrTable();
   Result OnCall(const TypeVector& param_types, const TypeVector& result_types);
   Result OnCallIndirect(const TypeVector& param_types,
                         const TypeVector& result_types);
+  Result OnReturnCall(const TypeVector& param_types, const TypeVector& result_types);
+  Result OnReturnCallIndirect(const TypeVector& param_types, const TypeVector& result_types);
   Result OnCatch();
   Result OnCompare(Opcode);
   Result OnConst(Type);
@@ -82,25 +85,35 @@ class TypeChecker {
   Result OnDrop();
   Result OnElse();
   Result OnEnd();
-  Result OnGetGlobal(Type);
-  Result OnGetLocal(Type);
+  Result OnGlobalGet(Type);
+  Result OnGlobalSet(Type);
   Result OnIf(const TypeVector& param_types, const TypeVector& result_types);
-  Result OnIfExcept(const TypeVector& param_types,
-                    const TypeVector& result_types,
-                    const TypeVector& except_sig);
   Result OnLoad(Opcode);
+  Result OnLocalGet(Type);
+  Result OnLocalSet(Type);
+  Result OnLocalTee(Type);
   Result OnLoop(const TypeVector& param_types, const TypeVector& result_types);
+  Result OnMemoryCopy();
+  Result OnDataDrop(Index);
+  Result OnMemoryFill();
   Result OnMemoryGrow();
+  Result OnMemoryInit(Index);
   Result OnMemorySize();
+  Result OnTableCopy();
+  Result OnElemDrop(Index);
+  Result OnTableInit(Index);
+  Result OnTableGet(Index);
+  Result OnTableSet(Index);
+  Result OnTableGrow(Index);
+  Result OnTableSize(Index);
+  Result OnRefNullExpr();
+  Result OnRefIsNullExpr();
   Result OnRethrow();
   Result OnReturn();
   Result OnSelect();
-  Result OnSetGlobal(Type);
-  Result OnSetLocal(Type);
   Result OnSimdLaneOp(Opcode, uint64_t);
   Result OnSimdShuffleOp(Opcode, v128);
   Result OnStore(Opcode);
-  Result OnTeeLocal(Type);
   Result OnTernary(Opcode);
   Result OnThrow(const TypeVector& sig);
   Result OnTry(const TypeVector& param_types, const TypeVector& result_types);
@@ -118,6 +131,7 @@ class TypeChecker {
                  const TypeVector& result_types);
   Result PopLabel();
   Result CheckLabelType(Label* label, LabelType label_type);
+  Result GetThisFunctionLabel(Label **label);
   Result PeekType(Index depth, Type* out_type);
   Result PeekAndCheckType(Index depth, Type expected);
   Result DropTypes(size_t drop_count);
@@ -125,12 +139,14 @@ class TypeChecker {
   void PushTypes(const TypeVector& types);
   Result CheckTypeStackEnd(const char* desc);
   Result CheckType(Type actual, Type expected);
+  Result CheckTypes(const TypeVector &actual, const TypeVector &expected);
   Result CheckSignature(const TypeVector& sig, const char* desc);
+  Result CheckReturnSignature(const TypeVector& sig, const TypeVector &expected,const char *desc);
   Result PopAndCheckSignature(const TypeVector& sig, const char* desc);
   Result PopAndCheckCall(const TypeVector& param_types,
                          const TypeVector& result_types,
                          const char* desc);
-  Result PopAndCheck1Type(Type expected, const char* desc);
+    Result PopAndCheck1Type(Type expected, const char* desc);
   Result PopAndCheck2Types(Type expected1, Type expected2, const char* desc);
   Result PopAndCheck3Types(Type expected1,
                            Type expected2,

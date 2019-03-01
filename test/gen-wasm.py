@@ -62,6 +62,8 @@ NAMED_VALUES = {
     'ELEM': 9,
     'CODE': 10,
     'DATA': 11,
+    'DATACOUNT': 12,
+    'EVENT': 13,
 
     # name subsection codes
     'NAME_MODULE': 0,
@@ -91,6 +93,8 @@ NAMED_VALUES = {
     "return": 0x0f,
     "call": 0x10,
     "call_indirect": 0x11,
+    "return_call": 0x12,
+    "return_call_indirect": 0x13,
     "drop": 0x1a,
     "select": 0x1b,
     "get_local": 0x20,

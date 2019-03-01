@@ -47,7 +47,7 @@
 000001f: 00                                        ; section size (guess)
 0000020: 01                                        ; num tables
 ; table 0
-0000021: 70                                        ; anyfunc
+0000021: 70                                        ; funcref
 0000022: 01                                        ; limits: flags
 0000023: 06                                        ; limits: initial
 0000024: 06                                        ; limits: max
@@ -57,7 +57,7 @@
 0000026: 00                                        ; section size (guess)
 0000027: 02                                        ; num elem segments
 ; elem segment header 0
-0000028: 00                                        ; table index
+0000028: 00                                      
 0000029: 41                                        ; i32.const
 000002a: 00                                        ; i32 literal
 000002b: 0b                                        ; end
@@ -65,7 +65,7 @@
 000002d: 01                                        ; function index
 000002e: 01                                        ; function index
 ; elem segment header 1
-000002f: 00                                        ; table index
+000002f: 00                                      
 0000030: 41                                        ; i32.const
 0000031: 02                                        ; i32 literal
 0000032: 0b                                        ; end
@@ -111,7 +111,7 @@ Function[3]:
  - func[1] sig=1
  - func[2] sig=2
 Table[1]:
- - table[0] type=anyfunc initial=6 max=6
+ - table[0] type=funcref initial=6 max=6
 Elem[2]:
  - segment[0] table=0 count=2 - init i32=0
   - elem[0] = func[1]
@@ -121,14 +121,18 @@ Elem[2]:
   - elem[3] = func[0]
   - elem[4] = func[1]
   - elem[5] = func[2]
+Code[3]:
+ - func[0] size=2
+ - func[1] size=2
+ - func[2] size=11
 
 Code Disassembly:
 
-00003b func[0]:
+00003c func[0]:
  00003d: 0b                         | end
-00003e func[1]:
+00003f func[1]:
  000040: 0b                         | end
-000041 func[2]:
+000042 func[2]:
  000043: 44 00 00 00 00 00 00 00 00 | f64.const 0x0p+0
  00004c: 0b                         | end
 ;;; STDOUT ;;)
